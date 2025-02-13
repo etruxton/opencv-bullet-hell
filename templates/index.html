@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OpenCV Bullet Hell</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">  </head>
+<body>
+    <h1>OpenCV Bullet Hell</h1>
+    <div class="container">
+        <canvas id="gameCanvas" width="600" height="800"></canvas>
+        <div class="video-container">
+            <img id="originalVideo">
+            <img id="processedVideo">
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='game.js') }}"></script>
+</body>
+</html>
