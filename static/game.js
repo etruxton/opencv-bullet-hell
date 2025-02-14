@@ -64,6 +64,53 @@ function create() {
     });
 }
 
+function boss_phase_1() {
+    gameState.boss_x += 2.1 * gameState.boss_direction;
+    if (gameState.boss_x <= 0 || gameState.boss_x >= GAME_WIDTH) {
+        gameState.boss_direction *= -1;
+    }
+
+    // *** Update the boss graphic's position ***
+    boss.x = gameState.boss_x;  // This is the crucial line you were missing
+    boss.y = gameState.boss_y;  // And this one too
+
+    if (game.loop.time - gameState.last_boss_bullet_time >= 500) {
+        let bulletGraphic = this.add.graphics();
+        bulletGraphic.lineStyle(2, 0x0000ff, 1);
+        bulletGraphic.strokeLineShape(new Phaser.Geom.Line(0, 0, 0, 20));
+        let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y);
+        bullet.graphic = bulletGraphic;
+        gameState.boss_bullets.push(bullet);
+        gameState.last_boss_bullet_time = game.loop.time;
+    }
+}
+function boss_phase_2() {
+    if (game.loop.time - gameState.last_boss_bullet_time >= 1500) {
+        const numBullets = 10;
+        for (let i = 0; i < numBullets; i++) {
+            const angle = Phaser.Math.DegToRad(i * (360 / numBullets));
+            let bulletGraphic = this.add.graphics();
+            bulletGraphic.lineStyle(2, 0x0000ff, 1);
+            let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y);
+            bullet.graphic = bulletGraphic;
+
+            const speed = 50; // Adjust bullet speed here
+            const vx = Math.cos(angle) * speed; // Calculate x velocity
+            const vy = Math.sin(angle) * speed; // Calculate y velocity
+
+            bullet.setVelocityX(vx); // Set the velocity
+            bullet.setVelocityY(vy);
+
+            // Add dx and dy to bullet for graphic movement
+            bullet.dx = vx/10;
+            bullet.dy = vy/10;
+
+            gameState.boss_bullets.push(bullet);
+        }
+        gameState.last_boss_bullet_time = game.loop.time;
+    }
+}
+
 function update() {
     if (!gameState || !gameState.bullets || !gameState.boss_bullets) return;
 
@@ -77,40 +124,15 @@ function update() {
     }
 
     if (gameState.boss_phase === 1) {
-        gameState.boss_x += 3 * gameState.boss_direction;
-        if (gameState.boss_x <= 0 || gameState.boss_x >= GAME_WIDTH) {
-            gameState.boss_direction *= -1;
-        }
-
-        if (game.loop.time - gameState.last_boss_bullet_time >= 1500) {
-            let bulletGraphic = this.add.graphics();
-            bulletGraphic.lineStyle(2, 0x0000ff, 1);
-            bulletGraphic.strokeLineShape(new Phaser.Geom.Line(0, 0, 0, 20)); // Vertical line
-            let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y);
-            bullet.graphic = bulletGraphic;
-            gameState.boss_bullets.push(bullet);
-            gameState.last_boss_bullet_time = game.loop.time;
-        }
+        boss_phase_1.call(this);
     } else if (gameState.boss_phase === 2) {
-        if (game.loop.time - gameState.last_boss_bullet_time >= 1500) {
-            for (let i = 0; i < 8; i++) {
-                const angle = Phaser.Math.DegToRad(i * 45);
-                let bulletGraphic = this.add.graphics();
-                bulletGraphic.lineStyle(2, 0x0000ff, 1);
-                let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y);
-                bullet.graphic = bulletGraphic;
-                bullet.setVelocityX(Math.cos(angle) * 50);
-                bullet.setVelocityY(Math.sin(angle) * 50);
-                gameState.boss_bullets.push(bullet);
-            }
-            gameState.last_boss_bullet_time = game.loop.time;
-        }
+        boss_phase_2.call(this);
     }
 
     if (game.loop.time - gameState.last_bullet_time >= 200) {
         let bulletGraphic = this.add.graphics();
         bulletGraphic.lineStyle(2, 0xff0000, 1);
-        bulletGraphic.strokeLineShape(new Phaser.Geom.Line(0, 0, 0, -20)); // Vertical line
+        bulletGraphic.strokeLineShape(new Phaser.Geom.Line(0, 0, 0, -20));
         let bullet = bullets.create(gameState.player_x, gameState.player_y);
         bullet.graphic = bulletGraphic;
         gameState.bullets.push(bullet);
@@ -122,8 +144,8 @@ function update() {
         bullet.graphic.lineStyle(2, 0xff0000, 1);
         bullet.graphic.strokeLineShape(new Phaser.Geom.Line(0, 0, 0, -20));
         bullet.y -= 20;
-        bullet.graphic.y = bullet.y; // Update graphic position
-        bullet.graphic.x = bullet.x; // Update graphic position
+        bullet.graphic.y = bullet.y;
+        bullet.graphic.x = bullet.x;
 
         if (bullet.y < 0) {
             bullet.destroy();
@@ -134,11 +156,7 @@ function update() {
     bossBullets.getChildren().forEach(bullet => {
         bullet.graphic.clear();
         bullet.graphic.lineStyle(2, 0x0000ff, 1);
-        if ("dx" in bullet) {
-            bullet.graphic.strokeLineShape(new Phaser.Geom.Line(0, 0, bullet.dx * 10, bullet.dy * 10));
-        } else {
-            bullet.graphic.strokeLineShape(new Phaser.Geom.Line(0, 0, 0, 20));
-        }
+        bullet.graphic.strokeLineShape(new Phaser.Geom.Line(0, 0, bullet.dx * 10, bullet.dy * 10));
         bullet.x += bullet.dx || 0; // Add dx or 0 if dx is not defined
         bullet.y += bullet.dy || 5; // Add dy or 5 if dy is not defined
         bullet.graphic.x = bullet.x; // Update graphic position
