@@ -65,6 +65,9 @@ async function getWebcam() {
 const originalVideo = document.getElementById('originalVideo');
 const processedVideo = document.getElementById('processedVideo');
 
+let prevX = 0;
+let prevY = 0;
+
 async function sendFrameToServer() {
     const canvas = document.createElement('canvas');
     canvas.width = video.width;
@@ -76,6 +79,8 @@ async function sendFrameToServer() {
         canvas.toBlob(async (blob) => { // Use toBlob to get a Blob object
             const formData = new FormData();
             formData.append('image', blob, 'frame.jpg'); // Append the Blob to FormData
+            formData.append('prevX', prevX); // Append previous X and Y to FormData
+            formData.append('prevY', prevY);
 
             try {
                 const response = await fetch('/video_feed', {
@@ -87,6 +92,12 @@ async function sendFrameToServer() {
                     const data = await response.json();
                     originalVideo.src = `data:image/jpeg;base64,${data.original}`;
                     processedVideo.src = `data:image/jpeg;base64,${data.processed}`;
+        
+                    if (data.detected) {
+                        prevX = data.x;
+                        prevY = data.y;
+                    } 
+        
                 } else {
                     console.error("Error sending frame:", response.status);
                 }
