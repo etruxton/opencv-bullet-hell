@@ -2,11 +2,13 @@
 <html>
 <head>
     <title>OpenCV Bullet Hell</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">  </head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.js"></script>
+</head>
 <body>
     <h1>OpenCV Bullet Hell</h1>
     <div class="container">
-        <canvas id="gameCanvas" width="600" height="800"></canvas>
+        <div id="gameCanvas"></div> 
         <div class="video-container">
             <img id="originalVideo">
             <img id="processedVideo">

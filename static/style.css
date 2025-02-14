@@ -1,7 +1,7 @@
 body {
     background-color: black;
     display: flex;
-    flex-direction: column; /* Stack elements vertically */
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
@@ -9,18 +9,24 @@ body {
 }
 
 .container {
-    display: flex; /* Arrange canvas and videos horizontally */
-    align-items: flex-start; /* Align items to the top of the container */
+    display: flex;
+    align-items: flex-start; /* Or center, as needed */
 }
 
 .video-container {
     display: flex;
-    flex-direction: column; /* Stack videos vertically */
-    margin-left: 10px; /* Add some space between canvas and videos */
+    flex-direction: column;
+    margin-left: 10px;
 }
 
-canvas {
+#gameCanvas { /* Target the div, not the canvas itself */
     border: 1px solid white;
+    width: 600px; /* Or your GAME_WIDTH */
+    height: 800px; /* Or your GAME_HEIGHT */
+}
+
+canvas { /* Style the actual canvas */
+    display: block; /* Important for Phaser */
 }
 
 #originalVideo, #processedVideo {

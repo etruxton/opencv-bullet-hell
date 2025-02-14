@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session
+from flask_cors import CORS
 import threading
 import random
 import time
@@ -15,8 +16,18 @@ GAME_WIDTH, GAME_HEIGHT = 600, 800
 
 def create_game_state():  # Function to create a game state
     return {
-        "player_x": GAME_WIDTH // 2,
-        "player_y": GAME_HEIGHT - 40,
+        "player_x": GAME_WIDTH // 2,  # Initial player x
+        "player_y": GAME_HEIGHT - 40, # Initial player y
+        "boss_x": GAME_WIDTH // 2, # Initial boss x
+        "boss_y": 50, # Initial boss y
+        "boss_health": 100,  # Initial boss health
+        "boss_phase": 1,
+        "boss_direction": 1,
+        "bullets": [],  # Initialize bullets as an empty list
+        "boss_bullets": [], # Initialize boss_bullets as an empty list
+        "last_boss_bullet_time": time.time(),
+        "last_bullet_time": time.time(),
+        "boss_start_time": time.time(),
         "prev_cX": GAME_WIDTH // 2,  # Store previous coordinates here
         "prev_cY": GAME_HEIGHT - 40,
     }
@@ -54,8 +65,8 @@ def video_feed():
         M = cv2.moments(mask)
 
         game_state = session['game_state']
-        prevX = int(request.form.get('prevX')) #Retrieve previous x and y from the request
-        prevY = int(request.form.get('prevY'))
+        prevX = int(request.form.get('prevX'))  # Correct way to get prevX
+        prevY = int(request.form.get('prevY'))  # Correct way to get prevY
 
         if M["m00"] != 0:  # Object detected
             cX = int(M["m10"] / M["m00"])
@@ -110,11 +121,21 @@ def video_feed():
         print(f"Error processing image: {e}")
         return jsonify({'error': 'Error processing image: {str(e)}'}), 500
 
-@app.route("/game_state")
+@app.route("/game_state", methods=['GET'])  # GET for initial fetch ONLY
 def get_game_state():
     if 'game_state' not in session:
-        session['game_state'] = create_game_state()  # Create game state on first request
-    return jsonify(session['game_state'])  # Return game_state as JSON
+        session['game_state'] = create_game_state()
+    return jsonify(session['game_state'])
+
+@app.route("/update_game_state", methods=['POST'])  # POST for updates
+def update_game_state():
+    game_state = session.get('game_state')
+    if game_state:
+        updated_game_state = request.get_json()
+        game_state.update(updated_game_state)
+        session['game_state'] = game_state
+        return jsonify({"message": "Game state updated successfully"})
+    return jsonify({"error": "Game state not found"}), 404
 
 if __name__ == "__main__":
     app.run(debug=True, threaded=True)
