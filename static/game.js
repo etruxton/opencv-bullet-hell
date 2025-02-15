@@ -8,7 +8,8 @@ let config = {
     physics: {
         default: 'arcade',
         arcade: {
-            gravity: { y: 0 }
+            gravity: { y: 0 },
+            debug: true
         }
     },
     scene: {
@@ -17,6 +18,7 @@ let config = {
         update: update
     },
     parent: 'gameCanvas'
+    
 };
 
 let game = new Phaser.Game(config);
@@ -32,40 +34,52 @@ let prevY = 760;
 let video;
 
 function preload() {
-    // No images to load now
+    this.load.image('player', 'static/assets/images/player.png'); // Load player image
+    this.load.image('boss', 'static/assets/images/boss.png');     // Load boss image
+    this.load.image('bossBullet', 'static/assets/images/bossBullet.png'); // Load boss bullet image
+    this.load.image('bullet', 'static/assets/images/bullet.png'); // Load player bullet image
+    
 }
 
 function create() {
     bullets = this.physics.add.group();
     bossBullets = this.physics.add.group();
 
+    const worldMargin = 1; // Adjust as needed
+    this.physics.world.setBounds(
+        worldMargin,
+        worldMargin,
+        GAME_WIDTH - 2 * worldMargin,
+        GAME_HEIGHT - 2 * worldMargin
+    );
+
     getGameState().then(() => {
         // Create player (orange circle)
-        player = this.add.graphics();
-        player.fillStyle(0xffa500, 1);
-        player.fillCircle(0, 0, 10);
+        player = this.physics.add.sprite(gameState.player_x, gameState.player_y, 'player');
+        player.setOrigin(0.5, 0.5); // Set origin to center for better rotation/scaling
         player.x = gameState.player_x;
         player.y = gameState.player_y;
         this.physics.add.existing(player);
 
         // Create boss (blue square)
-        boss = this.add.graphics();
-        boss.fillStyle(0x0000ff, 1);
-        boss.fillRect(-12.5, -12.5, 25, 25);
+        boss = this.physics.add.sprite(gameState.boss_x, gameState.boss_y, 'boss');
+        boss.setOrigin(0.5, 0.5); // Set origin to center for better rotation/scaling
         boss.x = gameState.boss_x;
         boss.y = gameState.boss_y;
         this.physics.add.existing(boss);
 
         // Set up collisions (example - adapt as needed)
+        this.physics.add.collider(bullets, boss, playerBulletHitBoss, null, this);
         this.physics.add.collider(player, bossBullets, bulletHitPlayer, null, this);
 
         originalVideo = document.getElementById('originalVideo');
         processedVideo = document.getElementById('processedVideo');
+
     });
 }
 
 function boss_phase_1() {
-    gameState.boss_x += 2.1 * gameState.boss_direction;
+    gameState.boss_x += 1.7 * gameState.boss_direction;
     if (gameState.boss_x <= 0 || gameState.boss_x >= GAME_WIDTH) {
         gameState.boss_direction *= -1;
     }
@@ -73,13 +87,13 @@ function boss_phase_1() {
     // *** Update the boss graphic's position ***
     boss.x = gameState.boss_x;  // This is the crucial line you were missing
     boss.y = gameState.boss_y;  // And this one too
+    
+    boss.body.x = boss.x - boss.width/2; // Update physics body to match (subtract half width since it is from the top left corner)
+    boss.body.y = boss.y - boss.height/2; // Update physics body to match (subtract half height since it is from the top left corner)
 
     if (game.loop.time - gameState.last_boss_bullet_time >= 500) {
-        let bulletGraphic = this.add.graphics();
-        bulletGraphic.lineStyle(2, 0x0000ff, 1);
-        bulletGraphic.strokeLineShape(new Phaser.Geom.Line(0, 0, 0, 20));
-        let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y);
-        bullet.graphic = bulletGraphic;
+        let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y, 'bossBullet');
+        bullet.setOrigin(0.5, 0.5); // Center the bullet image
         gameState.boss_bullets.push(bullet);
         gameState.last_boss_bullet_time = game.loop.time;
     }
@@ -89,22 +103,48 @@ function boss_phase_2() {
         const numBullets = 10;
         for (let i = 0; i < numBullets; i++) {
             const angle = Phaser.Math.DegToRad(i * (360 / numBullets));
-            let bulletGraphic = this.add.graphics();
-            bulletGraphic.lineStyle(2, 0x0000ff, 1);
-            let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y);
-            bullet.graphic = bulletGraphic;
-
-            const speed = 50; // Adjust bullet speed here
-            const vx = Math.cos(angle) * speed; // Calculate x velocity
-            const vy = Math.sin(angle) * speed; // Calculate y velocity
-
-            bullet.setVelocityX(vx); // Set the velocity
+            let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y, 'bossBullet');
+            bullet.setOrigin(0.5, 0.5); // Center the bullet image
+            const speed = 50;
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed;
+            bullet.setVelocityX(vx);
             bullet.setVelocityY(vy);
+            bullet.dx = vx / 10;
+            bullet.dy = vy / 10;
+            gameState.boss_bullets.push(bullet);
+        }
+        gameState.last_boss_bullet_time = game.loop.time;
+    }
+}
 
-            // Add dx and dy to bullet for graphic movement
-            bullet.dx = vx/10;
-            bullet.dy = vy/10;
+function boss_phase_3() {
+    if (game.loop.time - gameState.last_boss_bullet_time >= 1500) {
+        const numBullets = 10;
+        for (let i = 0; i < numBullets; i++) {
+            const angle = Phaser.Math.DegToRad(i * (360 / numBullets));
 
+            // Create the bullet BUT DON'T SET VELOCITY YET
+            let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y, 'bossBullet');
+            bullet.setOrigin(0.5, 0.5);
+
+
+            const bulletWidth = 10;
+            const bulletHeight = 10;
+            bullet.body.setSize(bulletWidth, bulletHeight);
+    
+            bullet.setBounce(1);
+            bullet.body.setCollideWorldBounds(true);
+    
+            const speed = 50;
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed;
+    
+            // ***USE PHYSICS-BASED MOVEMENT***
+            bullet.setVelocity(vx, vy); // Combined x and y velocity
+    
+            bullet.bounceCount = 3;
+    
             gameState.boss_bullets.push(bullet);
         }
         gameState.last_boss_bullet_time = game.loop.time;
@@ -117,55 +157,66 @@ function update() {
     player.x = gameState.player_x;
     player.y = gameState.player_y;
 
+    player.body.x = player.x - player.width/2; // Update physics body to match (subtract half width since it is from the top left corner)
+    player.body.y = player.y - player.height/2; // Update physics body to match (subtract half height since it is from the top left corner)
+
     const elapsedTime = game.loop.time - gameState.boss_start_time;
-    if (elapsedTime > 10000) {
-        gameState.boss_phase = gameState.boss_phase === 2 ? 1 : 2;
-        gameState.boss_start_time = game.loop.time;
+    const phaseChangeInterval = 8000; // 8 seconds in milliseconds
+
+    if (elapsedTime > phaseChangeInterval) {
+        let randomPhase;
+        do {
+           randomPhase = Phaser.Math.Between(1, 3);
+        } while (randomPhase === gameState.boss_phase);
+        console.log("Changing phase to", randomPhase);
+        //gameState.boss_phase === 3
+
+        gameState.boss_phase = randomPhase;
+        gameState.boss_start_time = game.loop.time;  // Correct placement of reset
     }
 
     if (gameState.boss_phase === 1) {
         boss_phase_1.call(this);
     } else if (gameState.boss_phase === 2) {
         boss_phase_2.call(this);
+    } else if (gameState.boss_phase === 3) {
+        boss_phase_3.call(this); 
     }
 
     if (game.loop.time - gameState.last_bullet_time >= 200) {
-        let bulletGraphic = this.add.graphics();
-        bulletGraphic.lineStyle(2, 0xff0000, 1);
-        bulletGraphic.strokeLineShape(new Phaser.Geom.Line(0, 0, 0, -20));
-        let bullet = bullets.create(gameState.player_x, gameState.player_y);
-        bullet.graphic = bulletGraphic;
+        let bullet = bullets.create(gameState.player_x, gameState.player_y, 'bullet');
+        bullet.setOrigin(0, 0.5); // Center the bullet image
         gameState.bullets.push(bullet);
         gameState.last_bullet_time = game.loop.time;
     }
 
     bullets.getChildren().forEach(bullet => {
-        bullet.graphic.clear();
-        bullet.graphic.lineStyle(2, 0xff0000, 1);
-        bullet.graphic.strokeLineShape(new Phaser.Geom.Line(0, 0, 0, -20));
-        bullet.y -= 20;
-        bullet.graphic.y = bullet.y;
-        bullet.graphic.x = bullet.x;
-
+        bullet.y -= 20; // Move the bullet (Phaser handles image display)
+        bullet.body.y = bullet.y - bullet.height/2; // Update physics body to match (subtract half height since it is from the top left corner)
+    
+    
         if (bullet.y < 0) {
             bullet.destroy();
             gameState.bullets.shift();
         }
     });
-
+    
     bossBullets.getChildren().forEach(bullet => {
-        bullet.graphic.clear();
-        bullet.graphic.lineStyle(2, 0x0000ff, 1);
-        bullet.graphic.strokeLineShape(new Phaser.Geom.Line(0, 0, bullet.dx * 10, bullet.dy * 10));
-        bullet.x += bullet.dx || 0; // Add dx or 0 if dx is not defined
-        bullet.y += bullet.dy || 5; // Add dy or 5 if dy is not defined
-        bullet.graphic.x = bullet.x; // Update graphic position
-        bullet.graphic.y = bullet.y; // Update graphic position
 
+        
+        bullet.body.x = bullet.x - bullet.width/2; // Update physics body to match (subtract half width since it is from the top left corner)
+        bullet.body.y = bullet.y - bullet.height/2; // Update physics body to match (subtract half height since it is from the top left corner)
+    
+        const outOfBoundsMargin = 2; // Adjust as needed
 
-        if (bullet.y > GAME_HEIGHT || bullet.y < 0 || bullet.x > GAME_WIDTH || bullet.x < 0) {
+        if (
+            bullet.y > GAME_HEIGHT + outOfBoundsMargin ||
+            bullet.y < -outOfBoundsMargin ||
+            bullet.x > GAME_WIDTH + outOfBoundsMargin ||
+            bullet.x < -outOfBoundsMargin
+        ) {
             bullet.destroy();
-            gameState.boss_bullets.shift();
+            gameState.boss_bullets = gameState.boss_bullets.filter(b => b !== bullet);
         }
     });
 
@@ -175,8 +226,23 @@ function update() {
 }
 
 function bulletHitPlayer(player, bullet) {
+    // 1. Destroy the bullet object
     bullet.destroy();
-    // Handle player hit
+    // 2. Remove the bullet from gameState.boss_bullets
+    gameState.boss_bullets = gameState.boss_bullets.filter(b => b !== bullet);
+    // 3. Destroy the bullet's graphic
+    if (bullet.graphic) { // Check if the graphic exists (important!)
+        bullet.graphic.destroy();
+    }
+    // ... other logic (e.g., player health -= 10;)
+    console.log("Player hit!");
+}
+
+function playerBulletHitBoss(boss, bullet) { // Correct order: boss, bullet
+    bullet.destroy(); // Destroy the player's bullet
+    gameState.bullets = gameState.bullets.filter(b => b !== bullet); // Remove bullet from array
+    // Optional: Add boss hit logic here (e.g., reduce boss health)
+    console.log("Boss hit!");
 }
 
 async function getGameState() {
@@ -207,7 +273,7 @@ async function getWebcam() {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         video.srcObject = stream;
     } catch (error) {
-        console.error("Error accessing webcam:", error);
+        //console.error("Error accessing webcam:", error);
         return;
     }
 
@@ -247,10 +313,10 @@ async function sendFrameToServer() {
                     }
 
                 } else {
-                    console.error("Error sending frame:", response.status);
+                    //console.error("Error sending frame:", response.status);
                 }
             } catch (error) {
-                console.error("Error sending frame:", error);
+                //console.error("Error sending frame:", error);
             }
         }, 'image/jpeg');
     }, 30);

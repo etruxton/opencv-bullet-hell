@@ -74,7 +74,7 @@ def video_feed():
             game_state['player_x'] = cX
             game_state['player_y'] = cY
             cv2.circle(res, (cX, cY), 5, (0, 0, 255), -1)
-            print(f"Object detected at ({cX}, {cY})")
+            #print(f"Object detected at ({cX}, {cY})")
 
             ret, jpeg_original = cv2.imencode('.jpg', frame) #Original Frame
             original_video = jpeg_original.tobytes()
@@ -94,7 +94,7 @@ def video_feed():
             })
 
         else:  # Object NOT detected
-            print("No Object detected")
+            #print("No Object detected")
 
             cv2.putText(res, "No object detected", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             
@@ -118,7 +118,7 @@ def video_feed():
             })
 
     except Exception as e:
-        print(f"Error processing image: {e}")
+        #print(f"Error processing image: {e}")
         return jsonify({'error': 'Error processing image: {str(e)}'}), 500
 
 @app.route("/game_state", methods=['GET'])  # GET for initial fetch ONLY
@@ -138,4 +138,4 @@ def update_game_state():
     return jsonify({"error": "Game state not found"}), 404
 
 if __name__ == "__main__":
-    app.run(debug=True, threaded=True)
+    app.run(debug=True)
