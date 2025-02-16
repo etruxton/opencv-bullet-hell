@@ -9,7 +9,7 @@ let config = {
         default: 'arcade',
         arcade: {
             gravity: { y: 0 },
-            debug: true
+            debug: false
         }
     },
     scene: {
@@ -44,6 +44,7 @@ function preload() {
 function create() {
     bullets = this.physics.add.group();
     bossBullets = this.physics.add.group();
+    this.physics.add.existing(bossBullets); // Add the GROUP to the physics world
 
     const worldMargin = 1; // Adjust as needed
     this.physics.world.setBounds(
@@ -60,6 +61,9 @@ function create() {
         player.x = gameState.player_x;
         player.y = gameState.player_y;
         this.physics.add.existing(player);
+
+        
+        gameState.currentAngleIndex = 0; // Initialize angle index
 
         // Create boss (blue square)
         boss = this.physics.add.sprite(gameState.boss_x, gameState.boss_y, 'boss');
@@ -78,42 +82,99 @@ function create() {
     });
 }
 
+
+
 function boss_phase_1() {
     gameState.boss_x += 1.7 * gameState.boss_direction;
     if (gameState.boss_x <= 0 || gameState.boss_x >= GAME_WIDTH) {
         gameState.boss_direction *= -1;
     }
 
-    // *** Update the boss graphic's position ***
-    boss.x = gameState.boss_x;  // This is the crucial line you were missing
-    boss.y = gameState.boss_y;  // And this one too
-    
-    boss.body.x = boss.x - boss.width/2; // Update physics body to match (subtract half width since it is from the top left corner)
-    boss.body.y = boss.y - boss.height/2; // Update physics body to match (subtract half height since it is from the top left corner)
+    boss.x = gameState.boss_x;
+    boss.y = gameState.boss_y;
+
+    boss.body.x = boss.x - boss.width / 2;
+    boss.body.y = boss.y - boss.height / 2;
 
     if (game.loop.time - gameState.last_boss_bullet_time >= 500) {
         let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y, 'bossBullet');
-        bullet.setOrigin(0.5, 0.5); // Center the bullet image
+        bullet.setOrigin(0.5, 0.5);
+
+        const bulletWidth = 10;
+        const bulletHeight = 10;
+        bullet.body.setSize(bulletWidth, bulletHeight);
+        this.physics.add.existing(bullet); // Add the bullet to the physics world.
+
+        const speed = 200;
+        bullet.setBounce(1);
+
+        // *** SET VELOCITY IN A CALLBACK (USING A TIMER) ***
+        const setBulletVelocity = () => {
+            if (bullet && bullet.body) {
+                bullet.setVelocityY(speed);
+            } else {
+                // Try again after a short delay
+                game.time.addEvent({
+                    delay: 10, // Try every 10 milliseconds
+                    callback: setBulletVelocity,
+                    callbackScope: this // Important: set the callback scope
+                });
+            }
+        };
+
+        setBulletVelocity(); // Call the function to start the check
+
         gameState.boss_bullets.push(bullet);
         gameState.last_boss_bullet_time = game.loop.time;
     }
 }
+
 function boss_phase_2() {
-    if (game.loop.time - gameState.last_boss_bullet_time >= 1500) {
-        const numBullets = 10;
-        for (let i = 0; i < numBullets; i++) {
-            const angle = Phaser.Math.DegToRad(i * (360 / numBullets));
-            let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y, 'bossBullet');
-            bullet.setOrigin(0.5, 0.5); // Center the bullet image
-            const speed = 50;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
-            bullet.setVelocityX(vx);
-            bullet.setVelocityY(vy);
-            bullet.dx = vx / 10;
-            bullet.dy = vy / 10;
+    if (game.loop.time - gameState.last_boss_bullet_time >= 200) { // Check every 0.5 seconds (500ms)
+        const spawnPoints = [
+            { x: 200, y: 1 },
+            { x: 400, y: 1 }
+        ];
+
+        const angles = [150, 120, 90, 60, 30]; // Array of angles
+        const currentAngleIndex = gameState.currentAngleIndex || 0; // Keep track of the current angle
+
+        for (const spawnPoint of spawnPoints) {
+            let bullet = bossBullets.create(spawnPoint.x, spawnPoint.y, 'bossBullet');
+            bullet.setOrigin(0.5, 0.5);
+
+            const bulletWidth = 10;
+            const bulletHeight = 10;
+            bullet.body.setSize(bulletWidth, bulletHeight);
+            this.physics.add.existing(bullet);
+
+            bullet.setBounce(1);
+
+            const setBulletVelocity = () => {
+                if (bullet && bullet.body) {
+                    const angle = Phaser.Math.DegToRad(angles[currentAngleIndex]);
+
+                    const speed = 200; // Keep speed constant
+                    const vx = speed * Math.cos(angle);
+                    const vy = speed * Math.sin(angle);
+
+                    bullet.setVelocity(vx, vy);
+                    bullet.off('addedtoscene', setBulletVelocity);
+                } else {
+                    game.time.addEvent({
+                        delay: 10,
+                        callback: setBulletVelocity,
+                        callbackScope: this
+                    });
+                }
+            };
+
+            setBulletVelocity();
             gameState.boss_bullets.push(bullet);
         }
+
+        // Increment the angle index for the next bullet
+        gameState.currentAngleIndex = (currentAngleIndex + 1) % angles.length; // Loop back to 0
         gameState.last_boss_bullet_time = game.loop.time;
     }
 }
@@ -124,27 +185,38 @@ function boss_phase_3() {
         for (let i = 0; i < numBullets; i++) {
             const angle = Phaser.Math.DegToRad(i * (360 / numBullets));
 
-            // Create the bullet BUT DON'T SET VELOCITY YET
             let bullet = bossBullets.create(gameState.boss_x, gameState.boss_y, 'bossBullet');
             bullet.setOrigin(0.5, 0.5);
-
 
             const bulletWidth = 10;
             const bulletHeight = 10;
             bullet.body.setSize(bulletWidth, bulletHeight);
-    
+            this.physics.add.existing(bullet); // Add the bullet to the physics world.
+
             bullet.setBounce(1);
             bullet.body.setCollideWorldBounds(true);
-    
-            const speed = 50;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
-    
-            // ***USE PHYSICS-BASED MOVEMENT***
-            bullet.setVelocity(vx, vy); // Combined x and y velocity
-    
+
+            const speed = 250;
+
+            // *** SET VELOCITY IN A CALLBACK (USING A TIMER) ***
+            const setBulletVelocity = () => {
+                if (bullet && bullet.body) {
+                    const vx = Math.cos(angle) * speed;
+                    const vy = Math.sin(angle) * speed;
+                    bullet.setVelocity(vx, vy);
+                } else {
+                    // Try again after a short delay
+                    game.time.addEvent({
+                        delay: 10, // Try every 10 milliseconds
+                        callback: setBulletVelocity,
+                        callbackScope: this // Important: set the callback scope
+                    });
+                }
+            };
+
+            setBulletVelocity();// Call the function to start the check
             bullet.bounceCount = 3;
-    
+
             gameState.boss_bullets.push(bullet);
         }
         gameState.last_boss_bullet_time = game.loop.time;
@@ -157,22 +229,21 @@ function update() {
     player.x = gameState.player_x;
     player.y = gameState.player_y;
 
-    player.body.x = player.x - player.width/2; // Update physics body to match (subtract half width since it is from the top left corner)
-    player.body.y = player.y - player.height/2; // Update physics body to match (subtract half height since it is from the top left corner)
+    player.body.x = player.x - player.width / 2;
+    player.body.y = player.y - player.height / 2;
 
     const elapsedTime = game.loop.time - gameState.boss_start_time;
-    const phaseChangeInterval = 8000; // 8 seconds in milliseconds
+    const phaseChangeInterval = 8000;
 
     if (elapsedTime > phaseChangeInterval) {
         let randomPhase;
         do {
-           randomPhase = Phaser.Math.Between(1, 3);
+            randomPhase = Phaser.Math.Between(1, 3);
         } while (randomPhase === gameState.boss_phase);
-        console.log("Changing phase to", randomPhase);
-        //gameState.boss_phase === 3
 
+        console.log("Changing phase to", randomPhase);
         gameState.boss_phase = randomPhase;
-        gameState.boss_start_time = game.loop.time;  // Correct placement of reset
+        gameState.boss_start_time = game.loop.time;
     }
 
     if (gameState.boss_phase === 1) {
@@ -180,34 +251,28 @@ function update() {
     } else if (gameState.boss_phase === 2) {
         boss_phase_2.call(this);
     } else if (gameState.boss_phase === 3) {
-        boss_phase_3.call(this); 
+        boss_phase_3.call(this);
     }
 
     if (game.loop.time - gameState.last_bullet_time >= 200) {
         let bullet = bullets.create(gameState.player_x, gameState.player_y, 'bullet');
-        bullet.setOrigin(0, 0.5); // Center the bullet image
+        bullet.setOrigin(0, 0.5);
         gameState.bullets.push(bullet);
         gameState.last_bullet_time = game.loop.time;
     }
 
     bullets.getChildren().forEach(bullet => {
-        bullet.y -= 20; // Move the bullet (Phaser handles image display)
-        bullet.body.y = bullet.y - bullet.height/2; // Update physics body to match (subtract half height since it is from the top left corner)
-    
-    
+        bullet.y -= 20;
+        bullet.body.y = bullet.y - bullet.height / 2;
+
         if (bullet.y < 0) {
             bullet.destroy();
             gameState.bullets.shift();
         }
     });
-    
-    bossBullets.getChildren().forEach(bullet => {
 
-        
-        bullet.body.x = bullet.x - bullet.width/2; // Update physics body to match (subtract half width since it is from the top left corner)
-        bullet.body.y = bullet.y - bullet.height/2; // Update physics body to match (subtract half height since it is from the top left corner)
-    
-        const outOfBoundsMargin = 2; // Adjust as needed
+    bossBullets.getChildren().forEach(bullet => {
+        const outOfBoundsMargin = 2;
 
         if (
             bullet.y > GAME_HEIGHT + outOfBoundsMargin ||
@@ -215,6 +280,23 @@ function update() {
             bullet.x > GAME_WIDTH + outOfBoundsMargin ||
             bullet.x < -outOfBoundsMargin
         ) {
+            bullet.destroy();
+            gameState.boss_bullets = gameState.boss_bullets.filter(b => b !== bullet);
+        }
+
+        // *** BOUNCE COUNT LOGIC (for phase 3 bullets) ***
+        if (gameState.boss_phase === 3) { // Only apply to phase 3 bullets
+            if (bullet.bounceCount === undefined) { // Check if bounceCount is undefined
+                bullet.bounceCount = 3; // Initialize if it's a "new" phase 3 bullet
+            }
+            if (bullet.bounceCount > 0 && bullet.body && bullet.body.onWall()) {  //Check bullet.body here as well
+                bullet.bounceCount--;
+            } else if (bullet.bounceCount <= 0 && bullet.body && bullet.body.onWall()) { //Check bullet.body here as well
+                bullet.destroy();
+                gameState.boss_bullets = gameState.boss_bullets.filter(b => b !== bullet);
+            }
+        }
+        else if (bullet.body && bullet.body.onWall()) {
             bullet.destroy();
             gameState.boss_bullets = gameState.boss_bullets.filter(b => b !== bullet);
         }
