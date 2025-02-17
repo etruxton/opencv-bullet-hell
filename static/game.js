@@ -32,6 +32,7 @@ let processedVideo;
 let prevX = 300;
 let prevY = 760;
 let video;
+let positionBuffer = [];
 
 function preload() {
     this.load.image('player', 'static/assets/images/player.png'); // Load player image
@@ -79,6 +80,7 @@ function create() {
         originalVideo = document.getElementById('originalVideo');
         processedVideo = document.getElementById('processedVideo');
 
+        //this.time.delayedCall(100, sendFrameToServer, [], this); // Delay slightly to ensure full initialization
     });
 }
 
@@ -226,9 +228,11 @@ function boss_phase_3() {
 function update() {
     if (!gameState || !gameState.bullets || !gameState.boss_bullets) return;
 
-    player.x = gameState.player_x;
-    player.y = gameState.player_y;
 
+    if (positionBuffer.length > 0) {
+        const nextPosition = positionBuffer.shift(); // Get the oldest update
+        movePlayer.call(this, nextPosition.x, nextPosition.y);
+    }
     player.body.x = player.x - player.width / 2;
     player.body.y = player.y - player.height / 2;
 
@@ -255,21 +259,9 @@ function update() {
     }
 
     if (game.loop.time - gameState.last_bullet_time >= 200) {
-        let bullet = bullets.create(gameState.player_x, gameState.player_y, 'bullet');
-        bullet.setOrigin(0, 0.5);
-        gameState.bullets.push(bullet);
+        createBullet.call(this); // Call the new bullet creation function
         gameState.last_bullet_time = game.loop.time;
     }
-
-    bullets.getChildren().forEach(bullet => {
-        bullet.y -= 20;
-        bullet.body.y = bullet.y - bullet.height / 2;
-
-        if (bullet.y < 0) {
-            bullet.destroy();
-            gameState.bullets.shift();
-        }
-    });
 
     bossBullets.getChildren().forEach(bullet => {
         const outOfBoundsMargin = 2;
@@ -305,6 +297,34 @@ function update() {
     if (game.loop.time % 5 === 0) {
         updateGameState();
     }
+}
+
+function createBullet() {
+    let bullet = bullets.create(gameState.player_x, gameState.player_y, 'bullet');
+    bullet.setOrigin(0.5, 1);
+    gameState.bullets.push(bullet);
+
+    const targetY = -bullet.height;
+
+    bullet.body.allowGravity = false;
+    bullet.body.setVelocity(0, 0);
+
+    const distance = Math.abs(targetY - gameState.player_y); // Calculate the distance
+    const speed = 1000; // Pixels per second (adjust as needed)
+    const duration = distance / speed * 1000; // Calculate duration based on speed
+
+    this.tweens.add({
+        targets: bullet,
+        y: targetY,
+        duration: duration, // Use calculated duration
+        ease: 'Linear',
+        onComplete: () => {
+            gameState.bullets = gameState.bullets.filter(b => b !== bullet);
+            bullet.destroy();
+        }
+    });
+
+    return bullet;
 }
 
 function bulletHitPlayer(player, bullet) {
@@ -362,6 +382,31 @@ async function getWebcam() {
     sendFrameToServer();
 }
 
+function movePlayer(newX, newY) {
+    if (player && this.tweens) {  // Check if player and tweens exist
+        this.tweens.add({
+            targets: player,
+            x: newX,
+            y: newY,
+            duration: 100, // Adjust duration for smoothness
+            ease: 'Linear', // Or other easing function
+            overwrite: true,
+            yoyo: false,
+            repeat: 0,
+            onUpdate: () => { // Update physics body during tween
+                player.body.x = player.x - player.width / 2;
+                player.body.y = player.y - player.height / 2;
+            },
+            onComplete: () => {
+                gameState.player_x = newX;
+                gameState.player_y = newY;
+            }
+        });
+    } else {
+      //console.log('Player or tweens not available yet.'); //Helpful for debugging
+    }
+}
+
 async function sendFrameToServer() {
     const canvas = document.createElement('canvas');
     canvas.width = video.width;
@@ -387,11 +432,11 @@ async function sendFrameToServer() {
                     originalVideo.src = `data:image/jpeg;base64,${data.original}`;
                     processedVideo.src = `data:image/jpeg;base64,${data.processed}`;
 
+
                     if (data.detected) {
+                        positionBuffer.push({ x: data.x, y: data.y });
                         prevX = data.x;
                         prevY = data.y;
-                        gameState.player_x = data.x;
-                        gameState.player_y = data.y;
                     }
 
                 } else {
@@ -401,7 +446,7 @@ async function sendFrameToServer() {
                 //console.error("Error sending frame:", error);
             }
         }, 'image/jpeg');
-    }, 30);
+    }, 60);
 }
 
 document.addEventListener('DOMContentLoaded', (event) => {
