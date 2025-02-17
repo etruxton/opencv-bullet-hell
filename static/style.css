@@ -41,3 +41,13 @@ h1 {
     margin-bottom: 10px;
     margin-top: 0px;
 }
+
+.pause-button { /* Style the Phaser Rectangle */
+    border: 2px solid white; /* Example border */
+    cursor: pointer; /* Change cursor on hover */
+    /* Add any other styling you want (background color, rounded corners, etc.) */
+}
+
+.pause-text { /* Target the text inside the button */
+    /* Add any text-specific styling here */
+}

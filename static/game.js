@@ -33,6 +33,7 @@ let prevX = 300;
 let prevY = 760;
 let video;
 let positionBuffer = [];
+let isPaused = false; // Add a variable to track pause state
 
 function preload() {
     this.load.image('player', 'static/assets/images/player.png'); // Load player image
@@ -82,9 +83,37 @@ function create() {
 
         //this.time.delayedCall(100, sendFrameToServer, [], this); // Delay slightly to ensure full initialization
     });
+
+    // Create a Phaser Rectangle (or Sprite if you have a button image)
+    const pauseButton = this.add.rectangle(10, 10, 100, 40, 0x888888); // Example color
+    pauseButton.setInteractive(); // Make it clickable
+
+    // Add text to the rectangle (center it)
+    const pauseText = this.add.text(30, 15, 'Pause', { fill: '#fff' })
+        .setOrigin(0.5, 0.5); // Center the text
+
+    // Make the rectangle and text clickable
+    pauseButton.setInteractive();
+
+    pauseButton.on('pointerdown', togglePause, this);
+
+    const escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    escKey.on('down', togglePause, this);
 }
 
+function togglePause() {
+    isPaused = !isPaused; // Toggle the pause state
 
+    if (isPaused) {
+        this.physics.pause();  // Pause the physics engine
+        this.tweens.pauseAll(); // Pause all tweens
+        // Optionally: Stop timers, sounds, etc.
+    } else {
+        this.physics.resume(); // Resume the physics engine
+        this.tweens.resumeAll();// Resume all tweens
+        // Optionally: Resume timers, sounds, etc.
+    }
+}
 
 function boss_phase_1() {
     gameState.boss_x += 1.7 * gameState.boss_direction;
@@ -226,6 +255,7 @@ function boss_phase_3() {
 }
 
 function update() {
+    if (isPaused) return; // If paused, exit the update function early
     if (!gameState || !gameState.bullets || !gameState.boss_bullets) return;
 
 
