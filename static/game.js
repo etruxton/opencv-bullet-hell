@@ -18,7 +18,6 @@ let config = {
         update: update
     },
     parent: 'gameCanvas'
-    
 };
 
 let game = new Phaser.Game(config);
@@ -34,85 +33,185 @@ let prevY = 760;
 let video;
 let positionBuffer = [];
 let isPaused = false; // Add a variable to track pause state
+let gameStarted = false; // Flag to track if the game has started
 
 function preload() {
-    this.load.image('player', 'static/assets/images/player.png'); // Load player image
-    this.load.image('boss', 'static/assets/images/boss.png');     // Load boss image
-    this.load.image('bossBullet', 'static/assets/images/bossBullet.png'); // Load boss bullet image
-    this.load.image('bullet', 'static/assets/images/bullet.png'); // Load player bullet image
+    this.load.image('player', 'static/assets/images/player.png');
+    this.load.image('boss', 'static/assets/images/boss.png');
+    this.load.image('bossBullet', 'static/assets/images/bossBullet.png');
+    this.load.image('bullet', 'static/assets/images/bullet.png');
+}
+
+document.addEventListener('DOMContentLoaded', (event) => {
+    video = document.createElement('video');
+    video.autoplay = true;
+    video.width = 300;
+    video.height = 400;
+    getWebcam(); // Call getWebcam inside the event listener
+});
+
+function create() {
+    // Start Menu
+    //getWebcam();
+    originalVideo = document.getElementById('originalVideo');
+    processedVideo = document.getElementById('processedVideo');
+
+    //const startMenu = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+
+    // Show the start menu again
+    createStartMenu.call(this);
+
+
+    // Pause Button (Hidden initially)
+    const pauseButtonContainer = this.add.container(10, 10);
+    const pauseButton = this.add.rectangle(0, 0, 100, 40, 0x888888);
+    pauseButton.setInteractive({ cursor: 'pointer' }); // Add cursor pointer
+    const pauseText = this.add.text(0, 0, 'Pause', { fill: '#fff' }).setOrigin(0.5);
+    pauseButtonContainer.add([pauseButton, pauseText]);
+    pauseText.setPosition(pauseButton.width / 2 - pauseText.width / 2, pauseButton.height / 2 - pauseText.height / 2);
+    pauseButtonContainer.setInteractive();
+    pauseButtonContainer.on('pointerdown', togglePause, this);
+    pauseButtonContainer.setVisible(false); // Hide initially
+
+    const escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+    escKey.on('down', togglePause, this);
+
+    // Initialize game elements (player, boss, etc.) - moved to startGame()
+    bullets = this.physics.add.group();
+    bossBullets = this.physics.add.group();
+    this.physics.add.existing(bossBullets);
+
+    const worldMargin = 1;
+    this.physics.world.setBounds(worldMargin, worldMargin, GAME_WIDTH - 2 * worldMargin, GAME_HEIGHT - 2 * worldMargin);
+
+    
+    startGame.call(this);
     
 }
 
-function create() {
-    bullets = this.physics.add.group();
-    bossBullets = this.physics.add.group();
-    this.physics.add.existing(bossBullets); // Add the GROUP to the physics world
-
-    const worldMargin = 1; // Adjust as needed
-    this.physics.world.setBounds(
-        worldMargin,
-        worldMargin,
-        GAME_WIDTH - 2 * worldMargin,
-        GAME_HEIGHT - 2 * worldMargin
-    );
-
+function startGame() {
     getGameState().then(() => {
-        // Create player (orange circle)
         player = this.physics.add.sprite(gameState.player_x, gameState.player_y, 'player');
-        player.setOrigin(0.5, 0.5); // Set origin to center for better rotation/scaling
+        player.setOrigin(0.5, 0.5);
         player.x = gameState.player_x;
         player.y = gameState.player_y;
         this.physics.add.existing(player);
+        gameState.currentAngleIndex = 0;
 
-        
-        gameState.currentAngleIndex = 0; // Initialize angle index
-
-        // Create boss (blue square)
         boss = this.physics.add.sprite(gameState.boss_x, gameState.boss_y, 'boss');
-        boss.setOrigin(0.5, 0.5); // Set origin to center for better rotation/scaling
+        boss.setOrigin(0.5, 0.5);
         boss.x = gameState.boss_x;
         boss.y = gameState.boss_y;
         this.physics.add.existing(boss);
 
-        // Set up collisions (example - adapt as needed)
         this.physics.add.collider(bullets, boss, playerBulletHitBoss, null, this);
         this.physics.add.collider(player, bossBullets, bulletHitPlayer, null, this);
 
-        originalVideo = document.getElementById('originalVideo');
-        processedVideo = document.getElementById('processedVideo');
-
-        //this.time.delayedCall(100, sendFrameToServer, [], this); // Delay slightly to ensure full initialization
+        // Show pause button
+        this.children.getByName('pauseButtonContainer').setVisible(true); 
     });
-
-    // Create a Phaser Rectangle (or Sprite if you have a button image)
-    const pauseButton = this.add.rectangle(10, 10, 100, 40, 0x888888); // Example color
-    pauseButton.setInteractive(); // Make it clickable
-
-    // Add text to the rectangle (center it)
-    const pauseText = this.add.text(30, 15, 'Pause', { fill: '#fff' })
-        .setOrigin(0.5, 0.5); // Center the text
-
-    // Make the rectangle and text clickable
-    pauseButton.setInteractive();
-
-    pauseButton.on('pointerdown', togglePause, this);
-
-    const escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
-    escKey.on('down', togglePause, this);
 }
 
+
 function togglePause() {
-    isPaused = !isPaused; // Toggle the pause state
+    isPaused = !isPaused;
 
     if (isPaused) {
-        this.physics.pause();  // Pause the physics engine
-        this.tweens.pauseAll(); // Pause all tweens
-        // Optionally: Stop timers, sounds, etc.
+        this.physics.pause();
+        this.tweens.pauseAll();
     } else {
-        this.physics.resume(); // Resume the physics engine
-        this.tweens.resumeAll();// Resume all tweens
-        // Optionally: Resume timers, sounds, etc.
+        this.physics.resume();
+        this.tweens.resumeAll();
     }
+}
+
+function createStartMenu() {
+    // Start Menu
+    const startMenu = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+
+    hideGameSprites();
+
+    const buttonStyle = {  // Style object for buttons
+        width: 200,
+        height: 50,
+        fillColor: 0x444444,
+        textColor: '#fff'
+    };
+
+    const createButton = (yPos, text, callback) => {
+        const button = this.add.rectangle(0, yPos, buttonStyle.width, buttonStyle.height, buttonStyle.fillColor);
+        button.setInteractive({ cursor: 'pointer' });
+        const buttonText = this.add.text(0, yPos, text, { fill: buttonStyle.textColor }).setOrigin(0.5);
+        button.on('pointerdown', callback, this); // Attach callback
+        return [button, buttonText]; // Return button and text
+    };
+
+    const [startGameButton, startGameText] = createButton(-100, 'Start Game', () => {
+        gameStarted = true;
+        startMenu.destroy();
+        //startGame.call(this);
+        showGameSprites.call(this);
+    });
+
+    const [instructionsButton, instructionsText] = createButton(-25, 'Instructions', () => {
+        console.log("Instructions clicked");
+    });
+
+    const [calibrateButton, calibrateText] = createButton(50, 'Calibrate Color', () => {
+        // Handle instructions logic (e.g., show instructions screen)
+        console.log("Calibrate Color clicked"); // Placeholder
+        startMenu.destroy(); // Hide the start menu
+        showCalibrationScreen.call(this); // Call the new function
+    });
+
+    if (gameStarted) {
+        showGameSprites();
+        // ... show other game elements
+    }
+
+    startMenu.add([startGameButton, startGameText, instructionsButton, instructionsText, calibrateButton, calibrateText]);
+}
+
+function showCalibrationScreen() {
+    // Hide all other game elements (if any)
+    hideGameSprites();
+    // ... hide other game elements
+
+    // Make originalVideo visible
+    originalVideo.style.display = 'block'; // Or however you're showing it
+
+    // Add a "Back to Menu" button
+    const backButton = this.add.rectangle(GAME_WIDTH - 110, 10, 100, 40, 0x444444);
+    backButton.setInteractive({ cursor: 'pointer' });
+    const backText = this.add.text(GAME_WIDTH - 110, 10, 'Back to Menu', { fill: '#fff' }).setOrigin(0.5);
+
+    backButton.on('pointerdown', () => {
+        // Hide calibration screen elements
+        //originalVideo.style.display = 'none';
+        backButton.destroy();
+        backText.destroy();
+
+        // Show the start menu again
+        createStartMenu.call(this);
+
+        // Show game elements if game already started
+        if (gameStarted) {
+            showGameSprites();
+            // ... show other game elements
+        }
+    }, this);
+}
+
+function hideGameSprites() {
+    if (player) player.setVisible(false);
+    if (boss) boss.setVisible(false);
+    // ... hide other game sprites (bullets, etc. if needed)
+}
+
+function showGameSprites() {
+    if (player) player.setVisible(true);
+    if (boss) boss.setVisible(true);
+    // ... show other game sprites
 }
 
 function boss_phase_1() {
@@ -255,8 +354,11 @@ function boss_phase_3() {
 }
 
 function update() {
+    if (!gameStarted) { hideGameSprites(); return }; // Don't update if the game hasn't started
     if (isPaused) return; // If paused, exit the update function early
+
     if (!gameState || !gameState.bullets || !gameState.boss_bullets) return;
+
 
 
     if (positionBuffer.length > 0) {
@@ -476,13 +578,6 @@ async function sendFrameToServer() {
                 //console.error("Error sending frame:", error);
             }
         }, 'image/jpeg');
-    }, 60);
+    }, 30);
 }
 
-document.addEventListener('DOMContentLoaded', (event) => {
-    video = document.createElement('video');
-    video.autoplay = true;
-    video.width = 300;
-    video.height = 400;
-    getWebcam(); // Call getWebcam inside the event listener
-});
