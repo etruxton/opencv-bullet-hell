@@ -20,7 +20,8 @@ body {
 }
 
 #gameCanvas { /* Target the div, not the canvas itself */
-    border: 1px solid white;
+    border: 1px solid;
+    border-color: white;
     width: 600px; /* Or your GAME_WIDTH */
     height: 800px; /* Or your GAME_HEIGHT */
 }

@@ -34,6 +34,10 @@ let video;
 let positionBuffer = [];
 let isPaused = false; // Add a variable to track pause state
 let gameStarted = false; // Flag to track if the game has started
+let sliderContainer; // Declare sliderContainer globally so it can be destroyed
+let isDarkMode; // Keep track of the current mode
+let pauseButtonContainer; 
+//let hsvExplanationText;
 
 function preload() {
     this.load.image('player', 'static/assets/images/player.png');
@@ -55,7 +59,7 @@ function create() {
     //getWebcam();
     originalVideo = document.getElementById('originalVideo');
     processedVideo = document.getElementById('processedVideo');
-
+    isDarkMode = true;
     //const startMenu = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2);
 
     // Show the start menu again
@@ -63,7 +67,7 @@ function create() {
 
 
     // Pause Button (Hidden initially)
-    const pauseButtonContainer = this.add.container(10, 10);
+    pauseButtonContainer = this.add.container(10, 10);
     const pauseButton = this.add.rectangle(0, 0, 100, 40, 0x888888);
     pauseButton.setInteractive({ cursor: 'pointer' }); // Add cursor pointer
     const pauseText = this.add.text(0, 0, 'Pause', { fill: '#fff' }).setOrigin(0.5);
@@ -108,7 +112,7 @@ function startGame() {
         this.physics.add.collider(player, bossBullets, bulletHitPlayer, null, this);
 
         // Show pause button
-        this.children.getByName('pauseButtonContainer').setVisible(true); 
+        //this.children.getByName('pauseButtonContainer').setVisible(true); 
     });
 }
 
@@ -131,7 +135,7 @@ function createStartMenu() {
 
     hideGameSprites();
 
-    const buttonStyle = {  // Style object for buttons
+    const buttonStyle = {
         width: 200,
         height: 50,
         fillColor: 0x444444,
@@ -147,10 +151,17 @@ function createStartMenu() {
     };
 
     const [startGameButton, startGameText] = createButton(-100, 'Start Game', () => {
-        gameStarted = true;
-        startMenu.destroy();
-        //startGame.call(this);
-        showGameSprites.call(this);
+        getGameState().then(() => {  // Get game state FIRST
+            if (gameState.hsv_values === undefined || gameState.hsv_values.some(isNaN)) { // Check if hsv_values is undefined or contains NaN
+                startMenu.destroy();
+                showCalibrationScreen.call(this); // Go to calibration if HSV values are not set
+            } else {
+                gameStarted = true;
+                startMenu.destroy();
+                positionBuffer = [];
+                showGameSprites.call(this);
+            }
+        });
     });
 
     const [instructionsButton, instructionsText] = createButton(-25, 'Instructions', () => {
@@ -158,48 +169,229 @@ function createStartMenu() {
     });
 
     const [calibrateButton, calibrateText] = createButton(50, 'Calibrate Color', () => {
-        // Handle instructions logic (e.g., show instructions screen)
-        console.log("Calibrate Color clicked"); // Placeholder
-        startMenu.destroy(); // Hide the start menu
-        showCalibrationScreen.call(this); // Call the new function
+        console.log("Calibrate Color clicked");
+        startMenu.destroy();
+        showCalibrationScreen.call(this);
     });
 
     if (gameStarted) {
         showGameSprites();
-        // ... show other game elements
     }
 
     startMenu.add([startGameButton, startGameText, instructionsButton, instructionsText, calibrateButton, calibrateText]);
 }
 
 function showCalibrationScreen() {
-    // Hide all other game elements (if any)
     hideGameSprites();
-    // ... hide other game elements
+    sliderContainer = this.add.container(GAME_WIDTH / 2 - 150, 100);
 
-    // Make originalVideo visible
-    originalVideo.style.display = 'block'; // Or however you're showing it
+    getGameState().then(() => {
+        createSliders.call(this); // Create the sliders
+        createButtons.call(this); // Create the buttons
+        createHSVExplanation.call(this); // Create the HSV explanation text
 
-    // Add a "Back to Menu" button
-    const backButton = this.add.rectangle(GAME_WIDTH - 110, 10, 100, 40, 0x444444);
+        sliderContainer.add([startButton, startText, backButton, backText, modeButton, modeText, hsvExplanationText]);
+    });
+}
+
+
+function createSliders() {
+    const hsvLabels = ["Lower H", "Lower S", "Lower V", "Upper H", "Upper S", "Upper V"];
+
+    if (gameState.hsv_values === undefined) {
+        gameState.hsv_values = [0, 0, 0, 179, 255, 255];
+    }
+
+    hsvLabels.forEach((label, index) => {
+        createSlider.call(this, label, gameState.hsv_values[index], index * 30, index);
+    });
+}
+
+function createSlider(label, initialValue, yOffset, hsvIndex) { // Moved the createSlider function outside
+    const sliderBarWidth = 200;
+    const sliderBar = this.add.rectangle(0, yOffset, sliderBarWidth, 10, 0x888888);
+    sliderBar.setInteractive({ cursor: 'pointer' });
+
+    let maxValue;
+    if (hsvIndex === 0 || hsvIndex === 3) { // Hue indices
+        maxValue = 179;
+    } else { // Saturation and Value indices
+        maxValue = 255;
+    }
+
+    const initialKnobX = (initialValue / maxValue) * sliderBarWidth;
+    const sliderKnob = this.add.circle(initialKnobX, yOffset, 8, 0xff0000);
+    sliderKnob.setInteractive({ cursor: 'pointer', draggable: true });
+    sliderKnob.input.dragX = true;
+
+    const text = this.add.text(sliderBarWidth + 10, yOffset - 5, `${label}: ${initialValue}`, { fill: '#fff' });
+
+    sliderContainer.add([sliderBar, sliderKnob, text]);
+
+    sliderBar.setOrigin(0, 0.5);
+    sliderKnob.setOrigin(0.5, 0.5);
+
+    sliderKnob.on('drag', (pointer, x) => {
+        let newValue = Math.round(((x - sliderBar.x) / sliderBarWidth) * maxValue);
+        newValue = Math.max(0, Math.min(maxValue, newValue));
+        sliderKnob.x = sliderBar.x + (newValue / maxValue) * sliderBarWidth;
+        text.setText(`${label}: ${newValue}`);
+        updateHSVValue(hsvIndex, newValue);
+    });
+
+    sliderBar.on('pointerdown', (pointer) => {
+        let newValue = Math.round(((pointer.x - sliderBar.x) / sliderBarWidth) * maxValue);
+        newValue = Math.max(0, Math.min(maxValue, newValue));
+        sliderKnob.x = sliderBar.x + (newValue / maxValue) * sliderBarWidth;
+        text.setText(`${label}: ${newValue}`);
+        updateHSVValue(hsvIndex, newValue);
+    });
+
+    return { text, sliderBar, sliderKnob };
+}
+
+function createButtons() {
+    const buttonYOffset = sliderContainer.getBounds().height + 20;
+
+    backButton = this.add.rectangle(GAME_WIDTH - 300, buttonYOffset, 120, 40, 0x444444);
     backButton.setInteractive({ cursor: 'pointer' });
-    const backText = this.add.text(GAME_WIDTH - 110, 10, 'Back to Menu', { fill: '#fff' }).setOrigin(0.5);
+    backText = this.add.text(GAME_WIDTH - 300, buttonYOffset, 'Menu', { fill: '#fff' }).setOrigin(0.5);
 
-    backButton.on('pointerdown', () => {
-        // Hide calibration screen elements
-        //originalVideo.style.display = 'none';
-        backButton.destroy();
-        backText.destroy();
+    backButton.on('pointerdown', handleBackButton.bind(this)); // Use bind to keep 'this' context
 
-        // Show the start menu again
-        createStartMenu.call(this);
 
-        // Show game elements if game already started
-        if (gameStarted) {
-            showGameSprites();
-            // ... show other game elements
+    modeButton = this.add.rectangle(10, buttonYOffset, 120, 40, 0x444444);
+    modeButton.setInteractive({ cursor: 'pointer' });
+    modeText = this.add.text(10, buttonYOffset, 'Dark Mode', { fill: '#fff' }).setOrigin(0.5);
+
+    modeButton.on('pointerdown', handleModeButton.bind(this)); // Use bind to keep 'this' context
+
+    startButton = this.add.rectangle(GAME_WIDTH - 442, buttonYOffset, 120, 40, 0x444444);
+    startButton.setInteractive({ cursor: 'pointer' });
+    startText = this.add.text(GAME_WIDTH - 442, buttonYOffset, 'Start Game', { fill: '#fff' }).setOrigin(0.5);
+
+    startButton.on('pointerdown', handleStartButton.bind(this)); // Use bind to keep 'this' context
+}
+
+function createHSVExplanation() {
+    const buttonYOffset = sliderContainer.getBounds().height + 150;
+    hsvExplanationText = this.add.text(
+        GAME_WIDTH / 2 - 150,
+        buttonYOffset,
+        "These sliders adjust the range of colors detected by the camera.\n" +
+        "Lower H, S, V: Minimum Hue, Saturation, and Value.\n" +
+        "Upper H, S, V: Maximum Hue, Saturation, and Value.\n" +
+        "Adjust these to isolate the colors you want to track.\n\n" +
+        "Example HSV Ranges (Approximate):\n" +
+        "'red': ([160, 40, 200], [180, 120, 255])\n" +
+        "'yellow': ([20, 100, 100], [30, 255, 255])\n" +
+        "'green': ([50, 40, 50], [90, 255, 255])\n" +
+        "'blue': ([90, 50, 50], [120, 255, 255])\n" +
+        "'purple': ([125, 50, 50], [140, 255, 255])\n" +
+        "'white': ([0, 0, 200], [180, 255, 255])\n",
+        {
+            fill: '#fff',
+            align: 'center',
+            fontSize: 16,
+            wordWrap: { width: GAME_WIDTH - 40, useAdvancedWrap: true }
         }
-    }, this);
+    ).setOrigin(0.5);
+
+    this.add.existing(hsvExplanationText); // Add directly to the scene
+}
+
+function handleBackButton() {
+    backButton.destroy();
+    backText.destroy();
+    startButton.destroy();
+    startText.destroy();
+    //hsvExplanationText.destroy(); // Destroy it
+
+    if (sliderContainer) {
+        sliderContainer.destroy(true);
+        sliderContainer = null;
+    }
+
+    createStartMenu.call(this);
+
+    if (gameStarted) {
+        showGameSprites();
+    }
+}
+
+function handleModeButton() {
+    isDarkMode = !isDarkMode;
+
+    const body = document.querySelector('body');
+    const h1 = document.querySelector('h1');
+    const gameCanvas = document.querySelector('#gameCanvas');
+
+    if (isDarkMode) {
+        body.style.backgroundColor = 'black';
+        h1.style.color = 'white';
+        gameCanvas.style.borderColor = 'white';
+        modeText.setText('Dark Mode');
+    } else {
+        body.style.backgroundColor = 'white';
+        h1.style.color = 'black';
+        gameCanvas.style.borderColor = 'black';
+        modeText.setText('Light Mode');
+    }
+}
+
+function handleStartButton() {
+    if (sliderContainer) {
+        sliderContainer.destroy(true);
+        sliderContainer = null;
+    }
+    startButton.destroy();
+    startText.destroy();
+    backButton.destroy();
+    backText.destroy();
+    modeButton.destroy();
+    modeText.destroy();
+
+    positionBuffer = [];
+
+    gameStarted = true;
+    showGameSprites();
+}
+
+async function updateHSVValue(hsvIndex, newValue) {
+    // Assuming your gameState.hsv_values is an array of 6 values
+    gameState.hsv_values[hsvIndex] = newValue;
+    try {
+        const response = await fetch('/update_hsv_values', {  // New route
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ hsv_values: gameState.hsv_values })
+        });
+        if (!response.ok) {
+            console.error("Error updating HSV values:", response.status);
+            // Handle error, perhaps revert the slider change or display a message
+            // Example:
+            // let revertedValue = gameState.hsv_values_previous[hsvIndex]; // Assuming you have a previous values array
+            // if (revertedValue !== undefined) {
+            //     // Find the corresponding slider and update its value and text
+            //     // ... (code to find slider and update)
+            // }
+
+        } else {
+          // If the update was successful, you can optionally store the current values as previous values
+          gameState.hsv_values_previous = [...gameState.hsv_values]; // Create a copy
+        }
+    } catch (error) {
+        console.error("Error updating HSV values:", error);
+        // Handle error, perhaps revert the slider change or display a message
+                // Example:
+            // let revertedValue = gameState.hsv_values_previous[hsvIndex]; // Assuming you have a previous values array
+            // if (revertedValue !== undefined) {
+            //     // Find the corresponding slider and update its value and text
+            //     // ... (code to find slider and update)
+            // }
+    }
 }
 
 function hideGameSprites() {
@@ -215,7 +407,7 @@ function showGameSprites() {
 }
 
 function boss_phase_1() {
-    gameState.boss_x += 1.7 * gameState.boss_direction;
+    gameState.boss_x += 1.5 * gameState.boss_direction;
     if (gameState.boss_x <= 0 || gameState.boss_x >= GAME_WIDTH) {
         gameState.boss_direction *= -1;
     }
@@ -310,6 +502,17 @@ function boss_phase_2() {
 }
 
 function boss_phase_3() {
+    gameState.boss_x -= 0.5 * gameState.boss_direction;
+    if (gameState.boss_x <= 0 || gameState.boss_x >= GAME_WIDTH) {
+        gameState.boss_direction *= -1;
+    }
+
+    boss.x = gameState.boss_x;
+    boss.y = gameState.boss_y;
+
+    boss.body.x = boss.x - boss.width / 2;
+    boss.body.y = boss.y - boss.height / 2;
+
     if (game.loop.time - gameState.last_boss_bullet_time >= 1500) {
         const numBullets = 10;
         for (let i = 0; i < numBullets; i++) {
@@ -359,7 +562,7 @@ function update() {
 
     if (!gameState || !gameState.bullets || !gameState.boss_bullets) return;
 
-
+    //pauseButtonContainer.setVisible(true); // Show the pause button
 
     if (positionBuffer.length > 0) {
         const nextPosition = positionBuffer.shift(); // Get the oldest update

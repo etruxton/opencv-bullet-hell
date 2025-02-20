@@ -38,7 +38,29 @@ def create_game_state():  # Function to create a game state
 
 @app.route("/")
 def index():
+    if 'lower_hsv' not in session:
+        session['lower_hsv'] = [0, 0, 0]  # Initial values
+    if 'upper_hsv' not in session:
+        session['upper_hsv'] = [179, 255, 255]  # Initial values
     return render_template("index.html")
+
+@app.route("/update_hsv_values", methods=['POST'])
+def update_hsv_values():
+    try:
+        data = request.get_json()
+        hsv_values = data.get('hsv_values')
+
+        if hsv_values is None or len(hsv_values) != 6:
+            return jsonify({'error': 'Invalid HSV values'}), 400
+
+        # Update the HSV values used in your image processing
+        session['lower_hsv'] = hsv_values[:3]  # Update in session
+        session['upper_hsv'] = hsv_values[3:]  # Update in session
+
+        return jsonify({'message': 'HSV values updated'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/video_feed', methods=['POST'])
 def video_feed():
@@ -57,9 +79,9 @@ def video_feed():
         frame = cv2.resize(frame, (GAME_WIDTH, GAME_HEIGHT), interpolation=cv2.INTER_AREA)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        lower_orange = np.array([0, 0, 195])
-        upper_orange = np.array([179, 255, 255])
-        mask = cv2.inRange(hsv, lower_orange, upper_orange)
+        lower_hsv = np.array(session['lower_hsv'])  # Retrieve from session
+        upper_hsv = np.array(session['upper_hsv'])  # Retrieve from session
+        mask = cv2.inRange(hsv, lower_hsv, upper_hsv)
         res = cv2.bitwise_and(frame, frame, mask=mask)
 
         M = cv2.moments(mask)
