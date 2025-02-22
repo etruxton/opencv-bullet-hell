@@ -629,7 +629,7 @@ function update() {
         }
     });
 
-    if (game.loop.time % 5 === 0) {
+    if (game.loop.time % 10 === 0) {
         updateGameState();
     }
 }
@@ -707,7 +707,11 @@ async function updateGameState() {
 
 async function getWebcam() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: true,
+            width: { ideal: 300 }, // Set ideal width
+            height: { ideal: 400 } // Set ideal height 
+        });
         video.srcObject = stream;
     } catch (error) {
         //console.error("Error accessing webcam:", error);
@@ -770,6 +774,12 @@ async function sendFrameToServer() {
 
                     if (data.detected) {
                         positionBuffer.push({ x: data.x, y: data.y });
+            
+                        // Limit buffer size to 5 positions 
+                        const maxBufferSize = 5;
+                        if (positionBuffer.length > maxBufferSize) {
+                            positionBuffer.shift(); // Remove the oldest position
+                        }
                         prevX = data.x;
                         prevY = data.y;
                     }
@@ -781,6 +791,6 @@ async function sendFrameToServer() {
                 //console.error("Error sending frame:", error);
             }
         }, 'image/jpeg');
-    }, 30);
+    }, 50); // 20 frames per second
 }
 
